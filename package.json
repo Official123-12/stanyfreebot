@@ -1,0 +1,37 @@
+{
+  "name": "insidious-bot",
+  "version": "2.1.1",
+  "description": "INSIDIOUS: THE LAST KEY WhatsApp Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "whatsapp-bot",
+    "insidious",
+    "xmd-baileys",
+    "whatsapp",
+    "bot"
+  ],
+  "author": "STANYTZ",
+  "license": "MIT",
+  "dependencies": {
+    "@whiskeysockets/baileys": "npm:xmd-baileys@latest",
+    "express": "^4.18.2",
+    "fs-extra": "^11.2.0",
+    "mongoose": "^8.0.0",
+    "axios": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "pino": "^8.15.0",
+    "qrcode-terminal": "^0.12.0",
+    "yt-search": "^2.10.4",
+    "moment-timezone": "^0.5.43"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
