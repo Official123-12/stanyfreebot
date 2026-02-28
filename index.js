@@ -11,6 +11,7 @@ const handler = require('./handler');
 // ✅ **FANCY FUNCTION**
 function fancy(text) {
     if (!text || typeof text !== 'string') return text;
+    
     try {
         const fancyMap = {
             a: 'ᴀ', b: 'ʙ', c: 'ᴄ', d: 'ᴅ', e: 'ᴇ', f: 'ꜰ', g: 'ɢ', h: 'ʜ', i: 'ɪ',
@@ -20,6 +21,7 @@ function fancy(text) {
             J: 'ᴊ', K: 'ᴋ', L: 'ʟ', M: 'ᴍ', N: 'ɴ', O: 'ᴏ', P: 'ᴘ', Q: 'ǫ', R: 'ʀ',
             S: 'ꜱ', T: 'ᴛ', U: 'ᴜ', V: 'ᴠ', W: 'ᴡ', X: 'x', Y: 'ʏ', Z: 'ᴢ'
         };
+        
         let result = '';
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
@@ -33,20 +35,6 @@ function fancy(text) {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// ✅ **DETECT ENVIRONMENT**
-const IS_VERCEL = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-const SESSIONS_DIR = IS_VERCEL 
-    ? '/tmp/sessions'  // Vercel inaruhusu kuandika hapa
-    : path.join(__dirname, 'sessions'); // Local
-
-console.log(fancy(`📁 Sessions directory: ${SESSIONS_DIR}`));
-
-// Hakikisha directory ipo
-if (!fs.existsSync(SESSIONS_DIR)) {
-    fs.mkdirSync(SESSIONS_DIR, { recursive: true });
-    console.log(fancy(`✅ Created sessions directory: ${SESSIONS_DIR}`));
-}
 
 // ✅ **MONGODB CONNECTION (OPTIONAL)**
 console.log(fancy("🔗 Connecting to MongoDB..."));
@@ -83,8 +71,10 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
-// ==================== MULTI-USER BOT MANAGEMENT ====================
-const bots = new Map(); // key: phoneNumber
+// ✅ **GLOBAL VARIABLES**
+let globalConn = null;
+let isConnected = false;
+let botStartTime = Date.now();
 
 // ✅ **LOAD CONFIG**
 let config = {};
@@ -102,19 +92,13 @@ try {
     };
 }
 
-// ✅ **FUNCTION KUUZA UNDA BOT KWA AJILI YA NAMBA**
-async function createBotInstance(phoneNumber) {
+// ✅ **MAIN BOT FUNCTION**
+async function startBot() {
     try {
-        console.log(fancy(`🚀 Starting bot for number: ${phoneNumber}`));
+        console.log(fancy("🚀 Starting INSIDIOUS..."));
         
-        // Kila namba ina session yake kwenye folder tofauti (kwenye /tmp au sessions/)
-        const sessionDir = path.join(SESSIONS_DIR, `insidious_${phoneNumber}`);
-        if (!fs.existsSync(sessionDir)) {
-            fs.mkdirSync(sessionDir, { recursive: true });
-        }
-
         // ✅ **AUTHENTICATION**
-        const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
+        const { state, saveCreds } = await useMultiFileAuthState('insidious_session');
         const { version } = await fetchLatestBaileysVersion();
 
         // ✅ **CREATE CONNECTION**
@@ -132,24 +116,20 @@ async function createBotInstance(phoneNumber) {
             markOnlineOnConnect: true
         });
 
-        const botInstance = {
-            conn,
-            phoneNumber,
-            isConnected: false,
-            startTime: Date.now(),
-            saveCreds
-        };
+        globalConn = conn;
+        botStartTime = Date.now();
 
         // ✅ **CONNECTION EVENT HANDLER**
         conn.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
             
             if (connection === 'open') {
-                console.log(fancy(`👹 INSIDIOUS: THE LAST KEY ACTIVATED for ${phoneNumber}`));
-                console.log(fancy(`✅ Bot for ${phoneNumber} is now online`));
+                console.log(fancy("👹 INSIDIOUS: THE LAST KEY ACTIVATED"));
+                console.log(fancy("✅ Bot is now online"));
                 
-                botInstance.isConnected = true;
+                isConnected = true;
                 
+                // Get bot info
                 let botName = conn.user?.name || "INSIDIOUS";
                 let botNumber = "Unknown";
                 let botId = conn.user?.id || "Unknown";
@@ -158,23 +138,26 @@ async function createBotInstance(phoneNumber) {
                     botNumber = conn.user.id.split(':')[0] || "Unknown";
                 }
                 
-                const botSecret = handler.getBotId ? handler.getBotId(phoneNumber) : 'Unknown';
-                const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers(phoneNumber).length : 0;
+                // 🔥 GET BOT ID AND PAIRED COUNT FROM HANDLER
+                const botSecret = handler.getBotId ? handler.getBotId() : 'Unknown';
+                const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers().length : 0;
                 
                 console.log(fancy(`🤖 Name: ${botName}`));
                 console.log(fancy(`📞 Number: ${botNumber}`));
                 console.log(fancy(`🆔 Bot ID: ${botSecret}`));
                 console.log(fancy(`👥 Paired Owners: ${pairedCount}`));
                 
+                // ✅ **INITIALIZE HANDLER**
                 try {
                     if (handler && typeof handler.init === 'function') {
-                        await handler.init(conn, phoneNumber);
-                        console.log(fancy(`✅ Handler initialized for ${phoneNumber}`));
+                        await handler.init(conn);
+                        console.log(fancy("✅ Handler initialized"));
                     }
                 } catch (e) {
-                    console.error(fancy(`❌ Handler init error for ${phoneNumber}:`), e.message);
+                    console.error(fancy("❌ Handler init error:"), e.message);
                 }
                 
+                // ✅ **SEND WELCOME MESSAGE TO OWNER**
                 setTimeout(async () => {
                     try {
                         if (config.ownerNumber && config.ownerNumber.length > 0) {
@@ -192,112 +175,126 @@ async function createBotInstance(phoneNumber) {
 📞 *Number:* ${botNumber}
 🆔 *Bot ID:* ${botSecret}
 👥 *Paired Owners:* ${pairedCount}
-📱 *Phone Number:* ${phoneNumber}
 
 ⚡ *Status:* ONLINE & ACTIVE
 
+📊 *ALL FEATURES ACTIVE:*
+🛡️ Anti View Once: ✅
+🗑️ Anti Delete: ✅
+🤖 AI Chatbot: ✅
+⚡ Auto Typing: ✅
+📼 Auto Recording: ✅
+👀 Auto Read: ✅
+❤️ Auto React: ✅
+🎉 Welcome/Goodbye: ✅
+
+🔧 *Commands:* All working
+📁 *Database:* Connected
+🚀 *Performance:* Optimal
+
 👑 *Developer:* STANYTZ
-💾 *Version:* 2.2.2 | Vercel-Ready`;
+💾 *Version:* 2.1.1 | Year: 2025`;
                                 
+                                // Send with image and forwarded style
                                 await conn.sendMessage(ownerJid, { 
                                     image: { 
                                         url: config.botImage || "https://files.catbox.moe/f3c07u.jpg"
                                     },
-                                    caption: welcomeMsg
+                                    caption: welcomeMsg,
+                                    contextInfo: { 
+                                        isForwarded: true,
+                                        forwardingScore: 999,
+                                        forwardedNewsletterMessageInfo: { 
+                                            newsletterJid: config.newsletterJid || "120363404317544295@newsletter",
+                                            newsletterName: config.botName || "INSIDIOUS BOT"
+                                        }
+                                    }
                                 });
+                                console.log(fancy("✅ Welcome message sent to owner"));
                             }
                         }
-                    } catch (e) {}
+                    } catch (e) {
+                        console.log(fancy("⚠️ Could not send welcome message:"), e.message);
+                    }
                 }, 3000);
             }
             
             if (connection === 'close') {
-                console.log(fancy(`🔌 Connection closed for number ${phoneNumber}`));
-                botInstance.isConnected = false;
+                console.log(fancy("🔌 Connection closed"));
+                isConnected = false;
                 
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 
                 if (shouldReconnect) {
-                    console.log(fancy(`🔄 Restarting bot for ${phoneNumber} in 5 seconds...`));
+                    console.log(fancy("🔄 Restarting bot in 5 seconds..."));
                     setTimeout(() => {
-                        bots.delete(phoneNumber);
-                        getOrCreateBot(phoneNumber);
+                        startBot();
                     }, 5000);
                 } else {
-                    console.log(fancy(`🚫 Logged out for ${phoneNumber}.`));
-                    bots.delete(phoneNumber);
+                    console.log(fancy("🚫 Logged out. Please scan QR again."));
                 }
             }
         });
 
+        // ✅ **CREDENTIALS UPDATE**
         conn.ev.on('creds.update', saveCreds);
+
+        // ✅ **MESSAGE HANDLER**
         conn.ev.on('messages.upsert', async (m) => {
             try {
                 if (handler && typeof handler === 'function') {
-                    await handler(conn, m, phoneNumber);
+                    await handler(conn, m);
                 }
             } catch (error) {
-                console.error(`Message handler error for ${phoneNumber}:`, error.message);
+                console.error("Message handler error:", error.message);
             }
         });
 
+        // ✅ **GROUP UPDATE HANDLER**
         conn.ev.on('group-participants.update', async (update) => {
             try {
                 if (handler && handler.handleGroupUpdate) {
-                    await handler.handleGroupUpdate(conn, update, phoneNumber);
+                    await handler.handleGroupUpdate(conn, update);
                 }
             } catch (error) {
-                console.error(`Group update error for ${phoneNumber}:`, error.message);
+                console.error("Group update error:", error.message);
             }
         });
 
+        // ✅ **CALL HANDLER**
         conn.ev.on('call', async (call) => {
             try {
                 if (handler && handler.handleCall) {
-                    await handler.handleCall(conn, call, phoneNumber);
+                    await handler.handleCall(conn, call);
                 }
             } catch (error) {
-                console.error(`Call handler error for ${phoneNumber}:`, error.message);
+                console.error("Call handler error:", error.message);
             }
         });
 
-        console.log(fancy(`🚀 Bot for ${phoneNumber} ready`));
-        return botInstance;
-
+        console.log(fancy("🚀 Bot ready for pairing via web interface"));
+        
     } catch (error) {
-        console.error(`Start error for ${phoneNumber}:`, error.message);
-        throw error;
+        console.error("Start error:", error.message);
+        // Restart once on error
+        setTimeout(() => {
+            startBot();
+        }, 10000);
     }
 }
 
-async function getOrCreateBot(phoneNumber) {
-    if (!phoneNumber || typeof phoneNumber !== 'string' || !/^\d+$/.test(phoneNumber)) {
-        throw new Error('Invalid phone number. Use only digits.');
-    }
-
-    if (bots.has(phoneNumber)) {
-        const bot = bots.get(phoneNumber);
-        if (bot.conn?.user) {
-            return bot;
-        } else {
-            bots.delete(phoneNumber);
-        }
-    }
-
-    const newBot = await createBotInstance(phoneNumber);
-    bots.set(phoneNumber, newBot);
-    return newBot;
-}
+// ✅ **START BOT**
+startBot();
 
 // ==================== HTTP ENDPOINTS ====================
 
+// ✅ **PAIRING ENDPOINT (8-DIGIT CODE) – HAKUNA CONNECTION CLOSE**
 app.get('/pair', async (req, res) => {
     try {
         let num = req.query.num;
-        
         if (!num) {
-            return res.json({ success: false, error: "Provide number! Example: /pair?num=255618558502" });
+            return res.json({ success: false, error: "Provide number! Example: /pair?num=255123456789" });
         }
         
         const cleanNum = num.replace(/[^0-9]/g, '');
@@ -305,20 +302,17 @@ app.get('/pair', async (req, res) => {
             return res.json({ success: false, error: "Invalid number. Must be at least 10 digits." });
         }
         
-        const phoneNumber = cleanNum;
-        
-        let bot;
-        try {
-            bot = await getOrCreateBot(phoneNumber);
-        } catch (e) {
-            return res.json({ success: false, error: e.message });
+        // Hakikisha globalConn ipo
+        if (!globalConn) {
+            return res.json({ success: false, error: "Bot is initializing. Please try again in a few seconds." });
         }
         
-        console.log(fancy(`🔑 Generating 8-digit code for ${phoneNumber}`));
+        console.log(fancy(`🔑 Generating 8-digit code for: ${cleanNum}`));
         
+        // Jaribu kupata code kwa timeout ya sekunde 30
         const code = await Promise.race([
-            bot.conn.requestPairingCode(phoneNumber),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 30000))
+            globalConn.requestPairingCode(cleanNum),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout - no response from WhatsApp')), 30000))
         ]);
         
         res.json({ 
@@ -329,15 +323,20 @@ app.get('/pair', async (req, res) => {
         
     } catch (err) {
         console.error("Pairing error:", err.message);
-        res.json({ success: false, error: "Failed: " + err.message });
+        if (err.message.includes("already paired")) {
+            res.json({ success: true, message: "Number already paired" });
+        } else {
+            res.json({ success: false, error: "Failed: " + err.message });
+        }
     }
 });
 
+// ✅ **UNPAIR ENDPOINT**
 app.get('/unpair', async (req, res) => {
     try {
         let num = req.query.num;
         if (!num) {
-            return res.json({ success: false, error: "Provide number!" });
+            return res.json({ success: false, error: "Provide number! Example: /unpair?num=255123456789" });
         }
         
         const cleanNum = num.replace(/[^0-9]/g, '');
@@ -345,17 +344,12 @@ app.get('/unpair', async (req, res) => {
             return res.json({ success: false, error: "Invalid number" });
         }
         
-        const phoneNumber = cleanNum;
-        const bot = bots.get(phoneNumber);
-        if (!bot) {
-            return res.json({ success: false, error: "No active bot found for this number" });
-        }
-        
+        // Call handler to unpair
         let result = false;
         if (handler && handler.unpairNumber) {
-            result = await handler.unpairNumber(cleanNum, phoneNumber);
+            result = await handler.unpairNumber(cleanNum);
         } else {
-            return res.json({ success: false, error: "Unpair function not available" });
+            return res.json({ success: false, error: "Unpair function not available in handler" });
         }
         
         res.json({ 
@@ -369,78 +363,56 @@ app.get('/unpair', async (req, res) => {
     }
 });
 
+// ✅ **HEALTH CHECK**
 app.get('/health', (req, res) => {
     const uptime = process.uptime();
     const hours = Math.floor(uptime / 3600);
     const minutes = Math.floor((uptime % 3600) / 60);
     const seconds = Math.floor(uptime % 60);
     
-    const botsStatus = {};
-    for (let [phoneNumber, bot] of bots.entries()) {
-        botsStatus[phoneNumber] = {
-            connected: bot.isConnected,
-            uptime: Date.now() - bot.startTime
-        };
-    }
-    
     res.json({
         status: 'healthy',
-        totalBots: bots.size,
-        bots: botsStatus,
-        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-        serverUptime: `${hours}h ${minutes}m ${seconds}s`,
-        environment: IS_VERCEL ? 'vercel' : 'local'
+        connected: isConnected,
+        uptime: `${hours}h ${minutes}m ${seconds}s`,
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
     });
 });
 
+// ✅ **BOT INFO ENDPOINT**
 app.get('/botinfo', (req, res) => {
-    const num = req.query.num;
-    if (!num) {
-        return res.json({ success: false, error: "Provide number (num) parameter" });
-    }
-    
-    const cleanNum = num.replace(/[^0-9]/g, '');
-    const phoneNumber = cleanNum;
-    const bot = bots.get(phoneNumber);
-    
-    if (!bot || !bot.conn || !bot.conn.user) {
+    if (!globalConn || !globalConn.user) {
         return res.json({ 
             success: false,
-            error: "Bot not connected for this number",
-            connected: bot ? bot.isConnected : false
+            error: "Bot not connected",
+            connected: isConnected
         });
     }
+    
+    const botSecret = handler.getBotId ? handler.getBotId() : 'Unknown';
+    const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers().length : 0;
     
     res.json({
         success: true,
-        phoneNumber: phoneNumber,
-        botName: bot.conn.user?.name || "INSIDIOUS",
-        botNumber: bot.conn.user?.id?.split(':')[0] || "Unknown",
-        connected: bot.isConnected,
-        uptime: Date.now() - bot.startTime
+        botName: globalConn.user?.name || "INSIDIOUS",
+        botNumber: globalConn.user?.id?.split(':')[0] || "Unknown",
+        botJid: globalConn.user?.id || "Unknown",
+        botSecret: botSecret,
+        pairedOwners: pairedCount,
+        connected: isConnected,
+        uptime: Date.now() - botStartTime
     });
-});
-
-app.get('/bots', (req, res) => {
-    const botList = [];
-    for (let [phoneNumber, bot] of bots.entries()) {
-        botList.push({
-            phoneNumber,
-            connected: bot.isConnected,
-            uptime: Date.now() - bot.startTime
-        });
-    }
-    res.json({ success: true, bots: botList });
 });
 
 // ✅ **START SERVER**
 app.listen(PORT, () => {
     console.log(fancy(`🌐 Web Interface: http://localhost:${PORT}`));
-    console.log(fancy(`🔗 Pair: http://localhost:${PORT}/pair?num=255XXXXXXXXX`));
-    console.log(fancy(`📁 Sessions: ${SESSIONS_DIR}`));
-    console.log(fancy(`🌎 Environment: ${IS_VERCEL ? 'Vercel' : 'Local'}`));
+    console.log(fancy(`🔗 8-digit Pairing: http://localhost:${PORT}/pair?num=255XXXXXXXXX`));
+    console.log(fancy(`🗑️  Unpair: http://localhost:${PORT}/unpair?num=255XXXXXXXXX`));
+    console.log(fancy(`🤖 Bot Info: http://localhost:${PORT}/botinfo`));
+    console.log(fancy(`❤️ Health: http://localhost:${PORT}/health`));
     console.log(fancy("👑 Developer: STANYTZ"));
-    console.log(fancy("📅 Version: 2.2.2 | Vercel-Ready"));
+    console.log(fancy("📅 Version: 2.1.1 | Year: 2025"));
+    console.log(fancy("🙏 Special Thanks: REDTECH"));
 });
 
 module.exports = app;
