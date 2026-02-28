@@ -11,7 +11,6 @@ const handler = require('./handler');
 // ✅ **FANCY FUNCTION**
 function fancy(text) {
     if (!text || typeof text !== 'string') return text;
-    
     try {
         const fancyMap = {
             a: 'ᴀ', b: 'ʙ', c: 'ᴄ', d: 'ᴅ', e: 'ᴇ', f: 'ꜰ', g: 'ɢ', h: 'ʜ', i: 'ɪ',
@@ -21,7 +20,6 @@ function fancy(text) {
             J: 'ᴊ', K: 'ᴋ', L: 'ʟ', M: 'ᴍ', N: 'ɴ', O: 'ᴏ', P: 'ᴘ', Q: 'ǫ', R: 'ʀ',
             S: 'ꜱ', T: 'ᴛ', U: 'ᴜ', V: 'ᴠ', W: 'ᴡ', X: 'x', Y: 'ʏ', Z: 'ᴢ'
         };
-        
         let result = '';
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
@@ -72,9 +70,8 @@ app.get('/dashboard', (req, res) => {
 });
 
 // ==================== MULTI-USER BOT MANAGEMENT ====================
-// Badala ya globalConn moja, tunatumia Map kuhifadhi boti za watumiaji wengi
-// key: userId (k.m., 'stanytz'), value: object { conn, isConnected, startTime, saveCreds }
-const bots = new Map();
+// Sasa tunatumia namba ya simu kama kitambulisho
+const bots = new Map(); // key: phoneNumber (clean), value: bot instance
 
 // ✅ **LOAD CONFIG**
 let config = {};
@@ -92,13 +89,13 @@ try {
     };
 }
 
-// ✅ **FUNCTION KUUZA UNDA BOT KWA AJILI YA MTUMIAJI**
-async function createBotInstance(userId) {
+// ✅ **FUNCTION KUUZA UNDA BOT KWA AJILI YA NAMBA**
+async function createBotInstance(phoneNumber) {
     try {
-        console.log(fancy(`🚀 Starting bot for user: ${userId}`));
+        console.log(fancy(`🚀 Starting bot for number: ${phoneNumber}`));
         
-        // Kila mtumiaji ana session yake kwenye folder tofauti
-        const sessionDir = path.join(__dirname, 'sessions', `insidious_${userId}`);
+        // Kila namba ina session yake kwenye folder tofauti
+        const sessionDir = path.join(__dirname, 'sessions', `insidious_${phoneNumber}`);
         if (!fs.existsSync(sessionDir)) {
             fs.mkdirSync(sessionDir, { recursive: true });
         }
@@ -124,19 +121,19 @@ async function createBotInstance(userId) {
 
         const botInstance = {
             conn,
-            userId,
+            phoneNumber,
             isConnected: false,
             startTime: Date.now(),
             saveCreds
         };
 
-        // ✅ **CONNECTION EVENT HANDLER (kwa bot hii)**
+        // ✅ **CONNECTION EVENT HANDLER**
         conn.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect } = update;
             
             if (connection === 'open') {
-                console.log(fancy(`👹 INSIDIOUS: THE LAST KEY ACTIVATED for ${userId}`));
-                console.log(fancy(`✅ Bot for ${userId} is now online`));
+                console.log(fancy(`👹 INSIDIOUS: THE LAST KEY ACTIVATED for ${phoneNumber}`));
+                console.log(fancy(`✅ Bot for ${phoneNumber} is now online`));
                 
                 botInstance.isConnected = true;
                 
@@ -149,29 +146,28 @@ async function createBotInstance(userId) {
                     botNumber = conn.user.id.split(':')[0] || "Unknown";
                 }
                 
-                // 🔥 GET BOT ID AND PAIRED COUNT FROM HANDLER (tunapitia userId)
-                const botSecret = handler.getBotId ? handler.getBotId(userId) : 'Unknown';
-                const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers(userId).length : 0;
+                // 🔥 GET BOT ID AND PAIRED COUNT FROM HANDLER (tunapitia phoneNumber)
+                const botSecret = handler.getBotId ? handler.getBotId(phoneNumber) : 'Unknown';
+                const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers(phoneNumber).length : 0;
                 
                 console.log(fancy(`🤖 Name: ${botName}`));
                 console.log(fancy(`📞 Number: ${botNumber}`));
                 console.log(fancy(`🆔 Bot ID: ${botSecret}`));
                 console.log(fancy(`👥 Paired Owners: ${pairedCount}`));
                 
-                // ✅ **INITIALIZE HANDLER (kwa bot hii)**
+                // ✅ **INITIALIZE HANDLER**
                 try {
                     if (handler && typeof handler.init === 'function') {
-                        await handler.init(conn, userId);  // tumepitisha userId
-                        console.log(fancy(`✅ Handler initialized for ${userId}`));
+                        await handler.init(conn, phoneNumber);
+                        console.log(fancy(`✅ Handler initialized for ${phoneNumber}`));
                     }
                 } catch (e) {
-                    console.error(fancy(`❌ Handler init error for ${userId}:`), e.message);
+                    console.error(fancy(`❌ Handler init error for ${phoneNumber}:`), e.message);
                 }
                 
                 // ✅ **SEND WELCOME MESSAGE TO OWNER (kwa bot hii)**
                 setTimeout(async () => {
                     try {
-                        // Tumia ownerNumber kutoka config (global) au unaweza kuwa na config ya kila mtumiaji
                         if (config.ownerNumber && config.ownerNumber.length > 0) {
                             const ownerNum = config.ownerNumber[0].replace(/[^0-9]/g, '');
                             if (ownerNum.length >= 10) {
@@ -187,7 +183,7 @@ async function createBotInstance(userId) {
 📞 *Number:* ${botNumber}
 🆔 *Bot ID:* ${botSecret}
 👥 *Paired Owners:* ${pairedCount}
-👤 *User ID:* ${userId}
+📱 *Phone Number:* ${phoneNumber}
 
 ⚡ *Status:* ONLINE & ACTIVE
 
@@ -206,7 +202,7 @@ async function createBotInstance(userId) {
 🚀 *Performance:* Optimal
 
 👑 *Developer:* STANYTZ
-💾 *Version:* 2.2.0 | Multi-User`;
+💾 *Version:* 2.2.1 | Phone-as-ID`;
                                 
                                 await conn.sendMessage(ownerJid, { 
                                     image: { 
@@ -222,32 +218,31 @@ async function createBotInstance(userId) {
                                         }
                                     }
                                 });
-                                console.log(fancy(`✅ Welcome message sent to owner for ${userId}`));
+                                console.log(fancy(`✅ Welcome message sent to owner for ${phoneNumber}`));
                             }
                         }
                     } catch (e) {
-                        console.log(fancy(`⚠️ Could not send welcome message for ${userId}:`), e.message);
+                        console.log(fancy(`⚠️ Could not send welcome message for ${phoneNumber}:`), e.message);
                     }
                 }, 3000);
             }
             
             if (connection === 'close') {
-                console.log(fancy(`🔌 Connection closed for user ${userId}`));
+                console.log(fancy(`🔌 Connection closed for number ${phoneNumber}`));
                 botInstance.isConnected = false;
                 
                 const statusCode = lastDisconnect?.error?.output?.statusCode;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 
                 if (shouldReconnect) {
-                    console.log(fancy(`🔄 Restarting bot for ${userId} in 5 seconds...`));
+                    console.log(fancy(`🔄 Restarting bot for ${phoneNumber} in 5 seconds...`));
                     setTimeout(() => {
-                        // Tunaondoa bot kutoka kwenye Map na kuunda upya
-                        bots.delete(userId);
-                        getOrCreateBot(userId);  // itaianzisha upya
+                        bots.delete(phoneNumber);
+                        getOrCreateBot(phoneNumber);  // itaianzisha upya
                     }, 5000);
                 } else {
-                    console.log(fancy(`🚫 Logged out for ${userId}. Please scan QR again.`));
-                    bots.delete(userId); // tunaondoa kabisa
+                    console.log(fancy(`🚫 Logged out for ${phoneNumber}. Please scan QR again.`));
+                    bots.delete(phoneNumber);
                 }
             }
         });
@@ -259,11 +254,10 @@ async function createBotInstance(userId) {
         conn.ev.on('messages.upsert', async (m) => {
             try {
                 if (handler && typeof handler === 'function') {
-                    // Tunapitisha userId kwenye handler
-                    await handler(conn, m, userId);
+                    await handler(conn, m, phoneNumber);
                 }
             } catch (error) {
-                console.error(`Message handler error for ${userId}:`, error.message);
+                console.error(`Message handler error for ${phoneNumber}:`, error.message);
             }
         });
 
@@ -271,10 +265,10 @@ async function createBotInstance(userId) {
         conn.ev.on('group-participants.update', async (update) => {
             try {
                 if (handler && handler.handleGroupUpdate) {
-                    await handler.handleGroupUpdate(conn, update, userId);
+                    await handler.handleGroupUpdate(conn, update, phoneNumber);
                 }
             } catch (error) {
-                console.error(`Group update error for ${userId}:`, error.message);
+                console.error(`Group update error for ${phoneNumber}:`, error.message);
             }
         });
 
@@ -282,56 +276,52 @@ async function createBotInstance(userId) {
         conn.ev.on('call', async (call) => {
             try {
                 if (handler && handler.handleCall) {
-                    await handler.handleCall(conn, call, userId);
+                    await handler.handleCall(conn, call, phoneNumber);
                 }
             } catch (error) {
-                console.error(`Call handler error for ${userId}:`, error.message);
+                console.error(`Call handler error for ${phoneNumber}:`, error.message);
             }
         });
 
-        console.log(fancy(`🚀 Bot for ${userId} ready for pairing`));
+        console.log(fancy(`🚀 Bot for ${phoneNumber} ready for pairing`));
         return botInstance;
 
     } catch (error) {
-        console.error(`Start error for ${userId}:`, error.message);
+        console.error(`Start error for ${phoneNumber}:`, error.message);
         throw error;
     }
 }
 
-// ✅ **FUNCTION YA KUPATA AU KUUUNDA BOT KWA MTUMIAJI**
-async function getOrCreateBot(userId) {
-    // Validate userId (epuka path traversal)
-    if (!userId || typeof userId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(userId)) {
-        throw new Error('Invalid userId. Use only letters, numbers, underscore, hyphen.');
+// ✅ **FUNCTION YA KUPATA AU KUUUNDA BOT KWA NAMBA**
+async function getOrCreateBot(phoneNumber) {
+    // Safisha namba (tayari imesafishwa)
+    if (!phoneNumber || typeof phoneNumber !== 'string' || !/^\d+$/.test(phoneNumber)) {
+        throw new Error('Invalid phone number. Use only digits.');
     }
 
-    if (bots.has(userId)) {
-        const bot = bots.get(userId);
-        // Angalia kama connection bado hai (kwa kuangalia user)
+    if (bots.has(phoneNumber)) {
+        const bot = bots.get(phoneNumber);
         if (bot.conn?.user) {
             return bot;
         } else {
-            // Kama imekufa, tunaondoa na kuunda upya
-            bots.delete(userId);
+            bots.delete(phoneNumber);
         }
     }
 
-    // Unda mpya
-    const newBot = await createBotInstance(userId);
-    bots.set(userId, newBot);
+    const newBot = await createBotInstance(phoneNumber);
+    bots.set(phoneNumber, newBot);
     return newBot;
 }
 
 // ==================== HTTP ENDPOINTS ====================
 
-// ✅ **PAIRING ENDPOINT (8-DIGIT CODE) – sasa inatumia userId**
+// ✅ **PAIRING ENDPOINT – sasa inatumia namba tu**
 app.get('/pair', async (req, res) => {
     try {
-        let userId = req.query.userId;
         let num = req.query.num;
         
-        if (!userId || !num) {
-            return res.json({ success: false, error: "Provide userId and num! Example: /pair?userId=stanytz&num=255123456789" });
+        if (!num) {
+            return res.json({ success: false, error: "Provide number! Example: /pair?num=255618558502" });
         }
         
         const cleanNum = num.replace(/[^0-9]/g, '');
@@ -339,19 +329,20 @@ app.get('/pair', async (req, res) => {
             return res.json({ success: false, error: "Invalid number. Must be at least 10 digits." });
         }
         
-        // Pata au unda bot kwa userId hii
+        // Tumia namba kama kitambulisho
+        const phoneNumber = cleanNum;
+        
         let bot;
         try {
-            bot = await getOrCreateBot(userId);
+            bot = await getOrCreateBot(phoneNumber);
         } catch (e) {
             return res.json({ success: false, error: e.message });
         }
         
-        console.log(fancy(`🔑 Generating 8-digit code for ${userId}: ${cleanNum}`));
+        console.log(fancy(`🔑 Generating 8-digit code for ${phoneNumber}`));
         
-        // Jaribu kupata code kwa timeout ya sekunde 30
         const code = await Promise.race([
-            bot.conn.requestPairingCode(cleanNum),
+            bot.conn.requestPairingCode(phoneNumber),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout - no response from WhatsApp')), 30000))
         ]);
         
@@ -374,10 +365,9 @@ app.get('/pair', async (req, res) => {
 // ✅ **UNPAIR ENDPOINT**
 app.get('/unpair', async (req, res) => {
     try {
-        let userId = req.query.userId;
         let num = req.query.num;
-        if (!userId || !num) {
-            return res.json({ success: false, error: "Provide userId and num! Example: /unpair?userId=stanytz&num=255123456789" });
+        if (!num) {
+            return res.json({ success: false, error: "Provide number! Example: /unpair?num=255618558502" });
         }
         
         const cleanNum = num.replace(/[^0-9]/g, '');
@@ -385,23 +375,22 @@ app.get('/unpair', async (req, res) => {
             return res.json({ success: false, error: "Invalid number" });
         }
         
-        // Tafuta bot ya mtumiaji
-        const bot = bots.get(userId);
+        const phoneNumber = cleanNum;
+        const bot = bots.get(phoneNumber);
         if (!bot) {
-            return res.json({ success: false, error: "No active bot found for this user" });
+            return res.json({ success: false, error: "No active bot found for this number" });
         }
         
-        // Call handler to unpair (tunapitisha userId)
         let result = false;
         if (handler && handler.unpairNumber) {
-            result = await handler.unpairNumber(cleanNum, userId);
+            result = await handler.unpairNumber(cleanNum, phoneNumber);
         } else {
             return res.json({ success: false, error: "Unpair function not available in handler" });
         }
         
         res.json({ 
             success: result, 
-            message: result ? `Number ${cleanNum} unpaired successfully for ${userId}` : `Failed to unpair ${cleanNum}`
+            message: result ? `Number ${cleanNum} unpaired successfully` : `Failed to unpair ${cleanNum}`
         });
         
     } catch (err) {
@@ -418,8 +407,8 @@ app.get('/health', (req, res) => {
     const seconds = Math.floor(uptime % 60);
     
     const botsStatus = {};
-    for (let [userId, bot] of bots.entries()) {
-        botsStatus[userId] = {
+    for (let [phoneNumber, bot] of bots.entries()) {
+        botsStatus[phoneNumber] = {
             connected: bot.isConnected,
             uptime: Date.now() - bot.startTime
         };
@@ -434,28 +423,31 @@ app.get('/health', (req, res) => {
     });
 });
 
-// ✅ **BOT INFO ENDPOINT (kwa mtumiaji maalum)**
+// ✅ **BOT INFO ENDPOINT (kwa namba maalum)**
 app.get('/botinfo', (req, res) => {
-    const userId = req.query.userId;
-    if (!userId) {
-        return res.json({ success: false, error: "Provide userId" });
+    const num = req.query.num;
+    if (!num) {
+        return res.json({ success: false, error: "Provide number (num) parameter" });
     }
     
-    const bot = bots.get(userId);
+    const cleanNum = num.replace(/[^0-9]/g, '');
+    const phoneNumber = cleanNum;
+    const bot = bots.get(phoneNumber);
+    
     if (!bot || !bot.conn || !bot.conn.user) {
         return res.json({ 
             success: false,
-            error: "Bot not connected for this user",
+            error: "Bot not connected for this number",
             connected: bot ? bot.isConnected : false
         });
     }
     
-    const botSecret = handler.getBotId ? handler.getBotId(userId) : 'Unknown';
-    const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers(userId).length : 0;
+    const botSecret = handler.getBotId ? handler.getBotId(phoneNumber) : 'Unknown';
+    const pairedCount = handler.getPairedNumbers ? handler.getPairedNumbers(phoneNumber).length : 0;
     
     res.json({
         success: true,
-        userId: userId,
+        phoneNumber: phoneNumber,
         botName: bot.conn.user?.name || "INSIDIOUS",
         botNumber: bot.conn.user?.id?.split(':')[0] || "Unknown",
         botJid: bot.conn.user?.id || "Unknown",
@@ -466,12 +458,12 @@ app.get('/botinfo', (req, res) => {
     });
 });
 
-// ✅ **ENDPOINT YA KUORODHESHA BOTI ZOTE (kwa ajili ya debugging)**
+// ✅ **ENDPOINT YA KUORODHESHA BOTI ZOTE**
 app.get('/bots', (req, res) => {
     const botList = [];
-    for (let [userId, bot] of bots.entries()) {
+    for (let [phoneNumber, bot] of bots.entries()) {
         botList.push({
-            userId,
+            phoneNumber,
             connected: bot.isConnected,
             uptime: Date.now() - bot.startTime,
             number: bot.conn?.user?.id?.split(':')[0] || null
@@ -483,13 +475,13 @@ app.get('/bots', (req, res) => {
 // ✅ **START SERVER**
 app.listen(PORT, () => {
     console.log(fancy(`🌐 Web Interface: http://localhost:${PORT}`));
-    console.log(fancy(`🔗 8-digit Pairing: http://localhost:${PORT}/pair?userId=YOUR_ID&num=255XXXXXXXXX`));
-    console.log(fancy(`🗑️  Unpair: http://localhost:${PORT}/unpair?userId=YOUR_ID&num=255XXXXXXXXX`));
-    console.log(fancy(`🤖 Bot Info: http://localhost:${PORT}/botinfo?userId=YOUR_ID`));
+    console.log(fancy(`🔗 8-digit Pairing: http://localhost:${PORT}/pair?num=255XXXXXXXXX`));
+    console.log(fancy(`🗑️  Unpair: http://localhost:${PORT}/unpair?num=255XXXXXXXXX`));
+    console.log(fancy(`🤖 Bot Info: http://localhost:${PORT}/botinfo?num=255XXXXXXXXX`));
     console.log(fancy(`❤️ Health: http://localhost:${PORT}/health`));
     console.log(fancy(`📋 List Bots: http://localhost:${PORT}/bots`));
     console.log(fancy("👑 Developer: STANYTZ"));
-    console.log(fancy("📅 Version: 2.2.0 | Multi-User"));
+    console.log(fancy("📅 Version: 2.2.1 | Phone-as-ID"));
     console.log(fancy("🙏 Special Thanks: REDTECH"));
 });
 
